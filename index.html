@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Barangay Covered Court Reservation System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a court-schedule board (day strip + hourly timeline) beside the request form,
+   a public list underneath, and a barangay desk that replaces the list for staff. */
+:root{
+  --bg:#ebeae4; --surface:#f8f7f3; --field:#ffffff; --ink:#18212b; --muted:#566070; --line:#cbc8be;
+  --accent:#1f4f99; --on-accent:#ffffff; --tape:#e8ae22;
+  --ok:#17744a; --warn:#8f5600; --bad:#b0231b; --idle:#5a6372;
+  --f-display:'Barlow Condensed','Arial Narrow',Arial,sans-serif;
+  --f-body:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --row:42px; /* keep equal to ROW in the script */
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161d; --surface:#18202a; --field:#0e141a; --ink:#e7eaef; --muted:#9aa4b2; --line:#2b3643;
+    --accent:#78a6ff; --on-accent:#0a1220; --tape:#f0b93a;
+    --ok:#53c78f; --warn:#f0b04a; --bad:#ff8077; --idle:#9aa4b2; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161d; --surface:#18202a; --field:#0e141a; --ink:#e7eaef; --muted:#9aa4b2; --line:#2b3643;
+  --accent:#78a6ff; --on-accent:#0a1220; --tape:#f0b93a;
+  --ok:#53c78f; --warn:#f0b04a; --bad:#ff8077; --idle:#9aa4b2; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:20px 56px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3,p{margin:0}
+h2{font-family:var(--f-display);font-weight:700;font-size:26px;letter-spacing:.01em;text-transform:uppercase;line-height:1.1;text-wrap:balance}
+h3{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:4px solid var(--tape)}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.logo{width:56px;height:40px;flex:none;color:var(--accent)}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(30px,6vw,46px);line-height:.98;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance}
+h1 span{color:var(--accent)}
+.top-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.pill i{width:9px;height:9px;border-radius:50%;background:var(--idle)}
+.pill.ok i{background:var(--ok)} .pill.warn i{background:var(--warn)} .pill.bad i{background:var(--bad)}
+
+/* cards and grid */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px;min-width:0}
+.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:start}
+.side{display:flex;flex-direction:column;gap:20px;min-width:0}
+.card-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px;margin-bottom:12px}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+/* day strip */
+.days{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
+.day{flex:none;min-width:66px;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 6px;border:1px solid var(--line);border-radius:4px;background:var(--field);color:var(--ink);font:inherit;cursor:pointer}
+.day .dw{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.day .dn{font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1}
+.day .dc{font-size:10px;color:var(--muted)}
+.day.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.day.on .dw,.day.on .dc{color:var(--on-accent);opacity:.85}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin:8px 0 10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:3px;display:inline-block}
+.sw.a{background:var(--accent)}
+.sw.p{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--tape) 55%,var(--surface)) 0 4px,color-mix(in srgb,var(--tape) 25%,var(--surface)) 4px 8px);border:1px dashed var(--warn)}
+.sw.y{border:2px dashed var(--accent)}
+
+/* hourly timeline */
+.tl{position:relative;border-top:1px solid var(--line)}
+.hour{display:grid;grid-template-columns:56px 1fr;width:100%;height:var(--row);padding:0;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;text-align:left;cursor:pointer}
+.hour .t{font-family:var(--f-mono);font-size:11px;text-align:right;padding:5px 10px 0 0}
+.hour .slot{border-left:1px solid var(--line);height:100%}
+.hour:hover .slot{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.blk{position:absolute;left:60px;right:4px;border-radius:3px;padding:3px 9px;font-size:12px;line-height:1.25;overflow:hidden;pointer-events:none;display:flex;flex-direction:column;justify-content:center}
+.blk span{opacity:.9;font-family:var(--f-mono);font-size:11px}
+.blk.approved{background:var(--accent);color:var(--on-accent)}
+.blk.pending{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--tape) 45%,var(--surface)) 0 8px,color-mix(in srgb,var(--tape) 22%,var(--surface)) 8px 16px);color:var(--ink);border:1px dashed var(--warn)}
+.blk.preview{border:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--ink)}
+.blk.preview.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+
+/* forms */
+.f{display:flex;flex-direction:column;gap:5px;min-width:0}
+label{font-size:13px;font-weight:600}
+.opt{font-weight:400;color:var(--muted)}
+input,select{width:100%;min-width:0;font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:9px 10px}
+input::placeholder{color:var(--muted);opacity:.8}
+.fs{border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:12px}
+.fs:disabled{opacity:.55}
+.two,.three{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.three{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:480px){.two,.three{grid-template-columns:minmax(0,1fr)}}
+.summary{font-size:14px;padding:10px 12px;border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.summary.bad{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 9%,var(--surface))}
+.err{font-size:14px;font-weight:600;color:var(--bad)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:600 15px var(--f-body);padding:10px 16px;border-radius:4px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);cursor:pointer}
+.btn:disabled{opacity:.6;cursor:progress}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.bad{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.sm{padding:6px 11px;font-size:13px}
+html[data-theme="dark"] .btn.ok,html[data-theme="dark"] .btn.bad{color:#0a1220}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.ok,:root:not([data-theme="light"]) .btn.bad{color:#0a1220}}
+.card h2+form,.card h2+p{margin-top:12px}
+.side h2{margin-bottom:12px}
+
+/* confirmation */
+.done{display:flex;flex-direction:column;gap:10px}
+.codebig{font-size:34px;font-weight:500;letter-spacing:.08em;border-bottom:4px solid var(--tape);align-self:flex-start;padding-bottom:2px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+
+/* chips and rows */
+.chip{--c:var(--idle);display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;color:var(--c);background:color-mix(in srgb,var(--c) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--c) 38%,transparent);white-space:nowrap}
+.chip.ok{--c:var(--ok)} .chip.warn{--c:var(--warn)} .chip.bad{--c:var(--bad)} .chip.acc{--c:var(--accent)}
+.list-head{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;margin-bottom:6px}
+.tabs{display:flex;gap:6px}
+.tab{font:600 13px var(--f-body);padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.tab.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.when{display:flex;flex-direction:column;min-width:128px}
+.when span{font-size:13px;color:var(--muted)}
+.what{flex:1 1 240px;min-width:0;overflow-wrap:anywhere}
+.what small{color:var(--muted);font-size:13px}
+.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.empty{padding:22px 0 8px;color:var(--muted)}
+.code{font-family:var(--f-mono);font-size:13px}
+.reason{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+.reason input{flex:1 1 220px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 22px}
+.stat{border-left:4px solid var(--line);padding-left:12px}
+.stat.hot{border-left-color:var(--tape)}
+.stat b{display:block;font-family:var(--f-display);font-size:34px;line-height:1;font-weight:700}
+.stat span{font-size:13px;color:var(--muted)}
+.sec{display:flex;flex-direction:column}
+.sec+.sec{margin-top:22px}
+.found{margin-top:12px;display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.notice{padding:10px 14px;border-radius:4px;border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--surface);font-size:14px}
+footer{font-size:13px;color:var(--muted);display:grid;gap:6px;max-width:75ch}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(92vw,480px);padding:10px 16px;border-radius:4px;background:var(--ink);color:var(--surface);font-weight:600;font-size:14px;z-index:10}
+.toast.bad{background:var(--bad);color:#fff}
+@media (prefers-reduced-motion:no-preference){.hour .slot{transition:background .12s}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 56 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="2" width="52" height="36" rx="2"/>
+        <path d="M28 2v36"/>
+        <circle cx="28" cy="20" r="7"/>
+        <path d="M2 11h9v18H2M54 11h-9v18h9"/>
+      </svg>
+      <div>
+        <p class="eyebrow">Barangay Hall · Reservation desk</p>
+        <h1>Barangay Covered Court <span>Reservation System</span></h1>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="pill" id="conn"><i></i><span id="connText">Connecting</span></span>
+      <button class="btn ghost" id="deskBtn" type="button" data-act="desk" hidden>Barangay desk</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="schedH">
+      <div class="card-head">
+        <h2 id="schedH">Court schedule</h2>
+        <p class="muted" id="dateLong"></p>
+      </div>
+      <div class="days" id="days"></div>
+      <div class="legend">
+        <span><i class="sw a"></i>Approved</span>
+        <span><i class="sw p"></i>Pending, slot is held</span>
+        <span><i class="sw y"></i>Your request</span>
+        <span>Tap an hour to start a request there</span>
+      </div>
+      <div class="tl" id="timeline"></div>
+    </section>
+
+    <div class="side">
+      <section class="card" aria-labelledby="formH">
+        <h2 id="formH">Reserve the court</h2>
+        <form id="bookForm" novalidate>
+          <fieldset class="fs" id="fs">
+            <div class="f"><label for="fName">Full name</label><input id="fName" name="name" autocomplete="name" maxlength="60" placeholder="Juan Dela Cruz"></div>
+            <div class="two">
+              <div class="f"><label for="fPurok">Purok</label><select id="fPurok"></select></div>
+              <div class="f"><label for="fPhone">Mobile number</label><input id="fPhone" inputmode="tel" autocomplete="tel" maxlength="14" placeholder="09123456789"></div>
+            </div>
+            <div class="f"><label for="fPurpose">What is it for?</label><select id="fPurpose"></select></div>
+            <div class="f"><label for="fDetails">Event details <span class="opt">optional</span></label><input id="fDetails" maxlength="80" placeholder="Example: Purok 3 inter-team league"></div>
+            <div class="three">
+              <div class="f"><label for="fDate">Date</label><input id="fDate" type="date"></div>
+              <div class="f"><label for="fStart">Starts</label><select id="fStart"></select></div>
+              <div class="f"><label for="fHours">Length</label><select id="fHours"></select></div>
+            </div>
+            <div class="f"><label for="fPeople">Expected people</label><input id="fPeople" type="number" min="1" max="300" value="20" inputmode="numeric"></div>
+            <p class="summary" id="summary" aria-live="polite"></p>
+            <p class="err" id="formErr" role="alert" hidden></p>
+            <button class="btn" id="submitBtn" type="submit">Send reservation request</button>
+          </fieldset>
+        </form>
+        <div class="done" id="done" hidden></div>
+      </section>
+
+      <section class="card" aria-labelledby="lookH">
+        <h2 id="lookH">Check or cancel a request</h2>
+        <form id="lookupForm" class="fs" novalidate style="margin-top:12px">
+          <div class="two">
+            <div class="f"><label for="lCode">Reference code</label><input id="lCode" class="mono" maxlength="9" placeholder="CC-7K3F" autocomplete="off"></div>
+            <div class="f"><label for="lPhone">Mobile number</label><input id="lPhone" inputmode="tel" maxlength="14" placeholder="09123456789"></div>
+          </div>
+          <button class="btn ghost" type="submit">Find my request</button>
+        </form>
+        <div id="lookupOut" aria-live="polite"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" id="listCard" aria-labelledby="listH">
+    <div class="list-head">
+      <h2 id="listH">Reservations</h2>
+      <div class="tabs">
+        <button class="tab on" type="button" data-filter="upcoming" id="tabUp">Upcoming</button>
+        <button class="tab" type="button" data-filter="past" id="tabPast">Past</button>
+      </div>
+    </div>
+    <div id="listBody"></div>
+  </section>
+
+  <section class="card" id="deskCard" aria-labelledby="deskH" hidden></section>
+
+  <footer>
+    <p><b>Court hours:</b> 6 AM to 10 PM. Requests are held on the schedule until the barangay desk decides. Declined and cancelled requests free the slot.</p>
+    <p>Fees are sample rates set in the CONFIG block at the top of the page script. The barangay sets the real ones. Pay the fee at the barangay hall after approval.</p>
+    <p id="modeNote"></p>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* ---------- Rules and pure helpers (no DOM). Safe to test on their own. ---------- */
+// <pure>
+const CONFIG = {
+  OPEN_HOUR: 6,              // court opens 6 AM
+  CLOSE_HOUR: 22,            // court closes 10 PM
+  MAX_HOURS: 5,              // longest single reservation
+  ADVANCE_DAYS: 30,          // how far ahead residents can book
+  PUROKS: 7,                 // number of puroks in the barangay
+  OUTSIDE: 'Outside the barangay',
+  NONRESIDENT_MULTIPLIER: 2, // fee multiplier for people from outside
+  ADMIN_PIN: '2468',         // barangay desk PIN when the data is saved on this device only. Change it.
+  PURPOSES: [                // rate = pesos per hour (sample rates)
+    { id: 'sports',  label: 'Sports (basketball, volleyball)',   short: 'Sports',        rate: 100 },
+    { id: 'program', label: 'Barangay or school program',        short: 'Program',       rate: 0 },
+    { id: 'private', label: 'Birthday, party, or private event', short: 'Private event', rate: 300 },
+    { id: 'wake',    label: 'Wake or funeral',                   short: 'Wake',          rate: 0 },
+    { id: 'other',   label: 'Something else',                    short: 'Other',         rate: 200 }
+  ]
+};
+const pad = n => String(n).padStart(2, '0');
+function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function parseYmd(s) { const p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function fmtTime(min) {
+  const h = Math.floor(min / 60), m = min % 60, ap = h >= 12 ? 'PM' : 'AM', h12 = ((h + 11) % 12) + 1;
+  return h12 + (m ? ':' + pad(m) : '') + ' ' + ap;
+}
+function fmtRange(b) {
+  const s = fmtTime(b.startMin), e = fmtTime(b.endMin);
+  return s.slice(-2) === e.slice(-2) ? s.slice(0, -3) + '–' + e : s + '–' + e;
+}
+function peso(n) { return n ? '₱' + Number(n).toLocaleString('en-PH') : 'Free'; }
+function overlaps(a, b) { return a.startMin < b.endMin && b.startMin < a.endMin; }
+function isActive(b) { return b.status === 'pending' || b.status === 'approved'; }
+function findClash(list, cand) {
+  return list.find(b => b.id !== cand.id && b.date === cand.date && isActive(b) && overlaps(b, cand)) || null;
+}
+function purposeOf(id) { return CONFIG.PURPOSES.find(p => p.id === id) || CONFIG.PURPOSES[CONFIG.PURPOSES.length - 1]; }
+function feeFor(purposeId, purok, hours) {
+  const rate = purposeOf(purposeId).rate;
+  const mult = purok === CONFIG.OUTSIDE ? CONFIG.NONRESIDENT_MULTIPLIER : 1;
+  return Math.round(rate * mult * hours);
+}
+function maskName(n) {
+  const p = String(n || '').trim().split(/\s+/);
+  return p.length < 2 ? p[0] : p[0] + ' ' + p[p.length - 1][0].toUpperCase() + '.';
+}
+function normPhone(s) {
+  let p = String(s || '').replace(/[\s\-().]/g, '');
+  if (p.indexOf('+63') === 0) p = '0' + p.slice(3);
+  else if (/^63\d{10}$/.test(p)) p = '0' + p.slice(2);
+  return p;
+}
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function makeCode(rand) {
+  rand = rand || Math.random;
+  let s = '';
+  for (let i = 0; i < 4; i++) s += CODE_CHARS[Math.floor(rand() * CODE_CHARS.length)];
+  return 'CC-' + s;
+}
+function normCode(s) {
+  const c = String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.indexOf('CC') === 0 ? 'CC-' + c.slice(2) : c;
+}
+function fail(field, msg) { return { ok: false, field: field, msg: msg }; }
+/* Checks a request against the rules. `now` is a Date, `items` the current reservations. */
+function validate(inp, now, items) {
+  const name = String(inp.name || '').trim().replace(/\s+/g, ' ');
+  if (name.length < 3) return fail('fName', 'Enter your full name.');
+  const phone = normPhone(inp.phone);
+  if (!/^09\d{9}$/.test(phone)) return fail('fPhone', 'Enter an 11-digit mobile number that starts with 09.');
+  if (!CONFIG.PURPOSES.some(p => p.id === inp.purposeId)) return fail('fPurpose', 'Choose what the court is for.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inp.date || '')) return fail('fDate', 'Pick a date.');
+  const today = ymd(now);
+  if (inp.date < today) return fail('fDate', 'That date has already passed.');
+  if (inp.date > ymd(addDays(now, CONFIG.ADVANCE_DAYS))) return fail('fDate', 'You can reserve up to ' + CONFIG.ADVANCE_DAYS + ' days ahead.');
+  const hours = Number(inp.hours);
+  if (!(hours >= 1 && hours <= CONFIG.MAX_HOURS)) return fail('fHours', 'Choose 1 to ' + CONFIG.MAX_HOURS + ' hours.');
+  const startMin = Number(inp.startMin), endMin = startMin + hours * 60;
+  if (!(startMin >= CONFIG.OPEN_HOUR * 60) || endMin > CONFIG.CLOSE_HOUR * 60)
+    return fail('fStart', 'The court is open ' + fmtTime(CONFIG.OPEN_HOUR * 60) + ' to ' + fmtTime(CONFIG.CLOSE_HOUR * 60) + '. Choose an earlier start or a shorter length.');
+  if (inp.date === today && startMin <= now.getHours() * 60 + now.getMinutes()) return fail('fStart', 'That start time has already passed.');
+  const people = Math.round(Number(inp.people));
+  if (!(people >= 1 && people <= 300)) return fail('fPeople', 'Enter how many people to expect (1 to 300).');
+  const data = {
+    name: name, phone: phone, purok: inp.purok, purposeId: inp.purposeId,
+    details: String(inp.details || '').trim().slice(0, 80), people: people,
+    date: inp.date, startMin: startMin, endMin: endMin, hours: hours,
+    fee: feeFor(inp.purposeId, inp.purok, hours)
+  };
+  const clash = findClash(items, data);
+  if (clash) return fail('fStart', 'Not available: ' + fmtRange(clash) + ' is already ' + (clash.status === 'approved' ? 'reserved' : 'requested') + '. Pick another time.');
+  return { ok: true, data: data };
+}
+// </pure>
+</script>
+
+<script>
+/* ---------- App ---------- */
+const ROW = 42; // keep equal to --row in the CSS
+const LS_KEY = 'bcc.court.bookings.v1';
+const state = {
+  items: [], date: ymd(new Date()), mode: 'connecting', canWrite: true, isAdmin: false,
+  deskOpen: false, unlocked: false, listFilter: 'upcoming', declining: null, reason: '',
+  confirm: null, lookup: null, uid: null, userApi: null, visits: [], people: {}
+};
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const byTime = (a, b) => a.date.localeCompare(b.date) || a.startMin - b.startMin;
+const fmtDay = ds => parseYmd(ds).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' });
+const todayStr = () => ymd(new Date());
+
+function errText(err) {
+  const c = err && err.code;
+  if (c === 'quota_exceeded') return 'The database is full. Remove old requests, then try again.';
+  if (c === 'invalid_argument') return 'This account is not allowed to change reservations here.';
+  return 'Something went wrong. Check your connection and try again.';
+}
+let toastTimer;
+function toast(msg, bad) {
+  const el = $('toast');
+  el.textContent = msg; el.className = 'toast' + (bad ? ' bad' : ''); el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3600);
+}
+
+/* ---------- Storage: shared database when the page has one, otherwise this browser ---------- */
+const Store = {
+  db: null,
+  holder: Math.random().toString(36).slice(2, 10),
+  async init() {
+    let db = null;
+    try { if (window.claude && typeof window.claude.use === 'function') db = await window.claude.use('db'); } catch (e) { db = null; }
+    if (db) {
+      this.db = db; state.mode = 'shared';
+      try {
+        const user = await window.claude.use('user');
+        if (user) {
+          state.userApi = user;
+          state.isAdmin = await user.canEdit();
+          state.uid = await user.id();
+          const w = await user.can('data.write');
+          state.canWrite = w !== false;
+        }
+      } catch (e) { /* keep defaults */ }
+      this.logVisit();
+      if (state.isAdmin) {
+        // Only the barangay desk (page editors) can read the visitor log.
+        db.collection('visits').onSnapshot(
+          snap => { state.visits = snap.docs.map(d => Object.assign({}, d.data(), { id: d.id })); render(); },
+          () => { /* no access: leave the log empty */ }
+        );
+      }
+      db.collection('bookings').onSnapshot(
+        snap => { state.items = snap.docs.map(d => Object.assign({}, d.data(), { id: d.id })); render(); },
+        () => { state.mode = 'offline'; render(); }
+      );
+    } else {
+      state.mode = 'local'; this.loadLocal();
+      window.addEventListener('storage', ev => { if (ev.key === LS_KEY) { this.loadLocal(); render(); } });
+    }
+    render();
+  },
+  /* Records that this signed-in account opened the page: first visit, last visit, visit count. Stores the id only. */
+  async logVisit() {
+    if (!this.db || !state.uid) return;
+    try {
+      const ref = this.db.doc('visits/' + state.uid), snap = await ref.get(), prev = snap.exists ? snap.data() : null;
+      await ref.set({ firstSeen: prev ? prev.firstSeen : Date.now(), lastSeen: Date.now(), visits: (prev ? prev.visits : 0) + 1 });
+    } catch (e) { /* view-only accounts cannot write; ignore */ }
+  },
+  loadLocal() {
+    try { state.items = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch (e) { state.items = []; }
+  },
+  saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state.items)); } catch (e) { /* private mode */ } },
+  /* Saves a new request. Returns {ok, rec} or {ok:false, msg}. Checks for a clash again at save time. */
+  async create(data) {
+    if (this.db) {
+      const db = this.db;
+      // One short lock per date so two people cannot save overlapping slots at the same moment.
+      const got = await db.doc('locks/' + data.date).acquire({ holder: this.holder, ttlMs: 8000 });
+      if (!got.acquired) return { ok: false, msg: 'Someone else is booking this date right now. Wait a few seconds and send again.' };
+      const snap = await db.collection('bookings').where('date', '==', data.date).get();
+      const clash = findClash(snap.docs.map(d => Object.assign({}, d.data(), { id: d.id })), data);
+      if (clash) return { ok: false, msg: 'Just taken: ' + fmtRange(clash) + ' was reserved a moment ago. Pick another time.' };
+      let code = makeCode();
+      for (let i = 0; i < 5; i++) {
+        const ex = await db.doc('bookings/' + code).get();
+        if (!ex.exists) break;
+        code = makeCode();
+      }
+      const rec = Object.assign({}, data, { id: code, uid: state.uid || null, status: 'pending', paid: false, createdAt: Date.now() });
+      await db.doc('bookings/' + code).set(rec);
+      return { ok: true, rec: rec };
+    }
+    this.loadLocal();
+    const clash = findClash(state.items, data);
+    if (clash) return { ok: false, msg: 'Just taken: ' + fmtRange(clash) + ' is already booked. Pick another time.' };
+    let code = makeCode();
+    while (state.items.some(b => b.id === code)) code = makeCode();
+    const rec = Object.assign({}, data, { id: code, status: 'pending', paid: false, createdAt: Date.now() });
+    state.items = state.items.concat([rec]); this.saveLocal(); render();
+    return { ok: true, rec: rec };
+  },
+  async update(id, patch) {
+    if (this.db) { await this.db.doc('bookings/' + id).update(patch); return; }
+    state.items = state.items.map(b => b.id === id ? Object.assign({}, b, patch) : b);
+    this.saveLocal(); render();
+  }
+};
+
+/* ---------- Form helpers ---------- */
+function readForm() {
+  const p = ($('fStart').value || '17:00').split(':').map(Number);
+  return {
+    name: $('fName').value, phone: $('fPhone').value, purok: $('fPurok').value, purposeId: $('fPurpose').value,
+    details: $('fDetails').value, date: $('fDate').value, startMin: p[0] * 60 + p[1],
+    hours: Number($('fHours').value), people: $('fPeople').value
+  };
+}
+function candidateFrom(f) { return { id: '', date: f.date, startMin: f.startMin, endMin: f.startMin + f.hours * 60 }; }
+function showFormErr(msg, field) {
+  const el = $('formErr'); el.textContent = msg; el.hidden = false;
+  const f = field && $(field); if (f) f.focus();
+}
+
+/* ---------- Rendering ---------- */
+function renderConn() {
+  const map = { connecting: ['Connecting', ''], shared: ['Live and shared', 'ok'], local: ['This device only', 'warn'], offline: ['Offline', 'bad'] };
+  const m = map[state.mode];
+  $('connText').textContent = m[0]; $('conn').className = 'pill ' + m[1];
+  $('modeNote').textContent = state.mode === 'local'
+    ? 'Demo mode: reservations are saved in this browser only. Connect a shared database so every phone sees the same schedule.'
+    : state.mode === 'shared' ? 'Signed-in visitors are recorded (name, first visit, last visit) so the barangay desk can see who used the system.' : '';
+}
+function renderChrome() {
+  $('deskBtn').hidden = state.mode === 'connecting' || (state.mode === 'shared' && !state.isAdmin);
+  $('deskBtn').textContent = state.deskOpen ? 'Back to schedule' : 'Barangay desk';
+  const notice = $('notice');
+  if (state.mode === 'shared' && !state.canWrite) {
+    notice.hidden = false;
+    notice.textContent = 'You can view the schedule, but this account cannot send requests. Ask the barangay desk for contributor access.';
+  } else if (state.mode === 'offline') {
+    notice.hidden = false; notice.textContent = 'The connection to the shared schedule was lost. Reload the page to reconnect.';
+  } else notice.hidden = true;
+  $('fs').disabled = state.mode === 'shared' && !state.canWrite;
+}
+function renderDays() {
+  const base = new Date(); let html = '';
+  for (let i = 0; i <= CONFIG.ADVANCE_DAYS; i++) {
+    const d = addDays(base, i), ds = ymd(d);
+    const n = state.items.filter(b => b.date === ds && isActive(b)).length;
+    html += '<button type="button" class="day' + (ds === state.date ? ' on' : '') + '" data-date="' + ds + '" aria-pressed="' + (ds === state.date) + '">' +
+      '<span class="dw">' + (i === 0 ? 'Today' : d.toLocaleDateString('en-PH', { weekday: 'short' })) + '</span>' +
+      '<span class="dn">' + d.getDate() + '</span><span class="dc">' + (n ? n + ' booked' : 'open') + '</span></button>';
+  }
+  $('days').innerHTML = html;
+  $('dateLong').textContent = parseYmd(state.date).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+function renderTimeline() {
+  const open = CONFIG.OPEN_HOUR * 60, close = CONFIG.CLOSE_HOUR * 60;
+  const pos = (s, e) => 'top:' + ((s - open) / 60 * ROW + 1) + 'px;height:' + ((e - s) / 60 * ROW - 2) + 'px';
+  let html = '';
+  for (let h = CONFIG.OPEN_HOUR; h < CONFIG.CLOSE_HOUR; h++)
+    html += '<button type="button" class="hour" data-h="' + h + '" aria-label="Start a request at ' + fmtTime(h * 60) + '"><span class="t">' + fmtTime(h * 60) + '</span><span class="slot"></span></button>';
+  state.items.filter(b => b.date === state.date && isActive(b)).forEach(b => {
+    html += '<div class="blk ' + b.status + '" style="' + pos(b.startMin, b.endMin) + '"><strong>' + esc(purposeOf(b.purposeId).short) + '</strong><span>' +
+      fmtRange(b) + (b.status === 'pending' ? ' · pending' : '') + '</span></div>';
+  });
+  const f = readForm(), c = candidateFrom(f);
+  if (f.date === state.date && c.startMin >= open && c.endMin <= close) {
+    const bad = !!findClash(state.items, c);
+    html += '<div class="blk preview' + (bad ? ' bad' : '') + '" style="' + pos(c.startMin, c.endMin) + '"><strong>Your request</strong><span>' + fmtRange(c) + '</span></div>';
+  }
+  $('timeline').innerHTML = html;
+}
+function updateSummary() {
+  const f = readForm(), el = $('summary'), c = candidateFrom(f);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) { el.className = 'summary'; el.textContent = 'Pick a date to see the fee.'; return; }
+  const label = fmtDay(f.date) + ' · ' + fmtRange(c);
+  const clash = findClash(state.items, c);
+  if (c.endMin > CONFIG.CLOSE_HOUR * 60) { el.className = 'summary bad'; el.textContent = label + ' ends after closing at ' + fmtTime(CONFIG.CLOSE_HOUR * 60) + '.'; return; }
+  if (clash) { el.className = 'summary bad'; el.textContent = label + ' overlaps a ' + (clash.status === 'approved' ? 'reserved' : 'requested') + ' slot (' + fmtRange(clash) + ').'; return; }
+  const p = purposeOf(f.purposeId), mult = f.purok === CONFIG.OUTSIDE ? CONFIG.NONRESIDENT_MULTIPLIER : 1;
+  const fee = feeFor(f.purposeId, f.purok, f.hours);
+  el.className = 'summary';
+  el.textContent = label + ' · ' + (fee ? 'Fee ' + peso(fee) + ' (' + peso(p.rate * mult) + ' per hour)' : 'No fee');
+}
+function statusChip(b) {
+  const m = { pending: ['Pending review', 'warn'], approved: ['Approved', 'ok'], rejected: ['Declined', 'bad'], cancelled: ['Cancelled', ''] }[b.status] || ['', ''];
+  return '<span class="chip ' + m[1] + '">' + m[0] + '</span>';
+}
+function renderList() {
+  const t = todayStr(), act = state.items.filter(isActive).sort(byTime);
+  const up = act.filter(b => b.date >= t), past = act.filter(b => b.date < t).reverse();
+  const show = state.listFilter === 'past' ? past : up;
+  $('tabUp').className = 'tab' + (state.listFilter === 'upcoming' ? ' on' : '');
+  $('tabPast').className = 'tab' + (state.listFilter === 'past' ? ' on' : '');
+  $('listBody').innerHTML = show.length ? show.map(b =>
+    '<article class="row"><div class="when"><strong>' + esc(fmtDay(b.date)) + '</strong><span class="mono">' + fmtRange(b) + '</span></div>' +
+    '<div class="what"><strong>' + esc(purposeOf(b.purposeId).label) + '</strong>' + (b.details ? ' · ' + esc(b.details) : '') +
+    '<br><small>' + esc(maskName(b.name)) + ' · ' + esc(b.purok) + '</small></div><div class="acts">' + statusChip(b) + '</div></article>').join('')
+    : '<p class="empty">' + (state.listFilter === 'past' ? 'No past reservations yet.' : 'No upcoming reservations. Tap an open hour on the schedule and send the first request.') + '</p>';
+}
+function renderLookup() {
+  const el = $('lookupOut'), L = state.lookup;
+  if (!L) { el.innerHTML = ''; return; }
+  const b = L.id && state.items.find(x => x.id === L.id);
+  if (!b) { el.innerHTML = '<div class="found"><p class="err">No request matches that code and mobile number. Check both and try again.</p></div>'; return; }
+  const canCancel = isActive(b) && b.date >= todayStr();
+  let html = '<div class="found"><div>' + statusChip(b) + '</div><p><strong>' + esc(fmtDay(b.date)) + '</strong> · <span class="mono">' + fmtRange(b) + '</span></p>' +
+    '<p>' + esc(purposeOf(b.purposeId).label) + ' · Fee ' + peso(b.fee) + (b.status === 'approved' && b.fee ? (b.paid ? ' (paid)' : ' (pay at the barangay hall)') : '') + '</p>';
+  if (b.status === 'rejected' && b.note) html += '<p>Reason: ' + esc(b.note) + '</p>';
+  if (canCancel) {
+    html += state.confirm === 'lc:' + b.id
+      ? '<div class="btns"><button class="btn bad sm" type="button" data-act="lc-yes" data-id="' + esc(b.id) + '">Yes, cancel it</button><button class="btn ghost sm" type="button" data-act="lc-no">Keep it</button></div>'
+      : '<div class="btns"><button class="btn ghost sm" type="button" data-act="lc-ask" data-id="' + esc(b.id) + '">Cancel this request</button></div>';
+  }
+  el.innerHTML = html + '</div>';
+}
+
+/* ---------- Barangay desk ---------- */
+function adminOK() { return state.mode === 'shared' ? state.isAdmin : state.unlocked; }
+function adminRow(b) {
+  const p = purposeOf(b.purposeId);
+  let acts = statusChip(b);
+  if (b.status === 'approved' && b.fee) acts += ' <span class="chip ' + (b.paid ? 'ok' : 'warn') + '">' + (b.paid ? 'Paid ' + peso(b.fee) : 'Unpaid ' + peso(b.fee)) + '</span>';
+  if (b.status === 'pending') {
+    if (state.declining === b.id) {
+      acts = '<div class="reason"><input id="reasonInput" maxlength="100" placeholder="Reason shown to the resident (optional)" value="' + esc(state.reason) + '">' +
+        '<button class="btn bad sm" type="button" data-act="d-yes" data-id="' + esc(b.id) + '">Decline request</button><button class="btn ghost sm" type="button" data-act="d-no">Back</button></div>';
+    } else {
+      acts += ' <button class="btn ok sm" type="button" data-act="approve" data-id="' + esc(b.id) + '">Approve</button><button class="btn ghost sm" type="button" data-act="d-open" data-id="' + esc(b.id) + '">Decline</button>';
+    }
+  } else if (b.status === 'approved' && b.date >= todayStr()) {
+    if (b.fee) acts += ' <button class="btn ghost sm" type="button" data-act="' + (b.paid ? 'unpaid' : 'paid') + '" data-id="' + esc(b.id) + '">' + (b.paid ? 'Mark unpaid' : 'Mark paid') + '</button>';
+    acts += state.confirm === 'c:' + b.id
+      ? ' <button class="btn bad sm" type="button" data-act="c-yes" data-id="' + esc(b.id) + '">Confirm cancel</button><button class="btn ghost sm" type="button" data-act="c-no">Keep</button>'
+      : ' <button class="btn ghost sm" type="button" data-act="c-ask" data-id="' + esc(b.id) + '">Cancel booking</button>';
+  } else if (b.status === 'approved' && b.fee && !b.paid) {
+    acts += ' <button class="btn ghost sm" type="button" data-act="paid" data-id="' + esc(b.id) + '">Mark paid</button>';
+  }
+  return '<article class="row"><div class="when"><strong>' + esc(fmtDay(b.date)) + '</strong><span class="mono">' + fmtRange(b) + '</span></div>' +
+    '<div class="what"><strong>' + esc(b.name) + '</strong> · <span class="mono">' + esc(b.phone) + '</span> · ' + esc(b.purok) +
+    '<br><small>' + esc(p.label) + (b.details ? ' · ' + esc(b.details) : '') + ' · ' + b.people + ' people · ' + peso(b.fee) + '</small>' +
+    '<br><small class="code">' + esc(b.id) + (b.note ? ' · ' + esc(b.note) : '') + '</small>' +
+    (b.uid && state.people[b.uid] && state.people[b.uid].name ? '<br><small>Sent from account: ' + esc(state.people[b.uid].name) + '</small>' : '') +
+    '</div><div class="acts">' + acts + '</div></article>';
+}
+const fmtStamp = ts => new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+/* Everyone who sent a request, grouped by mobile number. Works with or without sign-in. */
+function requesterList() {
+  const m = {};
+  state.items.forEach(b => {
+    const k = normPhone(b.phone), r = m[k] || (m[k] = { name: b.name, phone: b.phone, purok: b.purok, count: 0, last: 0 });
+    r.count++;
+    if ((b.createdAt || 0) >= r.last) { r.last = b.createdAt || 0; r.name = b.name; r.purok = b.purok; }
+  });
+  return Object.keys(m).map(k => m[k]).sort((a, b) => b.last - a.last);
+}
+let resolving = false;
+/* Looks up display names for account ids. Ids are stored; names are fetched fresh each session. */
+async function resolveNames(ids) {
+  const api = state.userApi;
+  const need = ids.filter((id, i) => id && ids.indexOf(id) === i && !(id in state.people));
+  if (!api || !need.length || resolving) return;
+  resolving = true;
+  try {
+    const ps = await api.profiles(need);
+    need.forEach(id => { state.people[id] = ps[id] || { name: '' }; });
+    resolving = false; renderDesk();
+  } catch (e) { need.forEach(id => { state.people[id] = { name: '' }; }); resolving = false; }
+}
+/* "Who has used it": requesters from the bookings, plus signed-in visitors when the data is shared. */
+function usageSections() {
+  const reqs = requesterList();
+  let html = '<div class="sec"><h3>Who has sent requests</h3>' + (reqs.length ? reqs.map(r =>
+    '<article class="row"><div class="what"><strong>' + esc(r.name) + '</strong> · <span class="mono">' + esc(r.phone) + '</span> · ' + esc(r.purok) +
+    '</div><div class="acts"><span class="chip acc">' + r.count + (r.count === 1 ? ' request' : ' requests') + '</span><span class="muted">last ' + esc(fmtStamp(r.last)) + '</span></div></article>').join('')
+    : '<p class="empty">Nobody has sent a request yet.</p>') + '</div>';
+  if (state.mode === 'shared') {
+    const vs = state.visits.slice().sort((a, b) => b.lastSeen - a.lastSeen);
+    html += '<div class="sec"><h3>Signed-in people who opened the page</h3>' + (vs.length ? vs.map(v => {
+      const p = state.people[v.id] || {}, n = state.items.filter(b => b.uid === v.id).length;
+      return '<article class="row"><div class="what"><strong>' + esc(p.name || 'Name not shared') + '</strong>' + (p.guest ? ' <span class="chip">Guest</span>' : '') +
+        (p.isMe ? ' <span class="chip acc">You</span>' : '') + '<br><small>First visit ' + esc(fmtStamp(v.firstSeen)) + '</small></div>' +
+        '<div class="acts"><span class="chip">' + v.visits + (v.visits === 1 ? ' visit' : ' visits') + '</span><span class="chip acc">' + n + (n === 1 ? ' request' : ' requests') +
+        '</span><span class="muted">last ' + esc(fmtStamp(v.lastSeen)) + '</span></div></article>';
+    }).join('') : '<p class="empty">No one has opened the page yet. Share the link and visitors will appear here.</p>') + '</div>';
+  } else {
+    html += '<div class="sec"><h3>People who only looked</h3><p class="empty">This standalone version cannot tell who opened the page. Only people who send a request are listed above. The shared version also lists signed-in visitors.</p></div>';
+  }
+  return html;
+}
+function renderDesk() {
+  const card = $('deskCard');
+  card.hidden = !state.deskOpen; $('listCard').hidden = state.deskOpen;
+  if (!state.deskOpen) return;
+  if (!adminOK()) {
+    card.innerHTML = '<h2 id="deskH">Barangay desk</h2><form id="pinForm" class="fs" style="margin-top:12px;max-width:320px"><div class="f"><label for="pinInput">Desk PIN</label><input id="pinInput" type="password" autocomplete="off" inputmode="numeric"></div>' +
+      '<p class="err" id="pinErr" hidden>That PIN is not right.</p><button class="btn" type="submit">Unlock</button></form>';
+    return;
+  }
+  const hadFocus = document.activeElement && document.activeElement.id === 'reasonInput';
+  const t = todayStr();
+  const pending = state.items.filter(b => b.status === 'pending').sort((a, b) => a.createdAt - b.createdAt);
+  const upcoming = state.items.filter(b => b.status === 'approved' && b.date >= t).sort(byTime);
+  const history = state.items.filter(b => !pending.includes(b) && !upcoming.includes(b)).sort((a, b) => byTime(b, a)).slice(0, 25);
+  const paidSum = state.items.filter(b => b.status === 'approved' && b.paid).reduce((s, b) => s + (b.fee || 0), 0);
+  const dueSum = state.items.filter(b => b.status === 'approved' && !b.paid).reduce((s, b) => s + (b.fee || 0), 0);
+  const sec = (title, list, none) => '<div class="sec"><h3>' + title + '</h3>' + (list.length ? list.map(adminRow).join('') : '<p class="empty">' + none + '</p>') + '</div>';
+  card.innerHTML = '<h2 id="deskH">Barangay desk</h2><div class="stats">' +
+    '<div class="stat' + (pending.length ? ' hot' : '') + '"><b>' + pending.length + '</b><span>Waiting for review</span></div>' +
+    '<div class="stat"><b>' + upcoming.length + '</b><span>Approved, coming up</span></div>' +
+    '<div class="stat"><b>' + peso(paidSum).replace('Free', '₱0') + '</b><span>Fees collected</span></div>' +
+    '<div class="stat"><b>' + peso(dueSum).replace('Free', '₱0') + '</b><span>Fees still due</span></div></div>' +
+    sec('Needs review', pending, 'Nothing waiting. New requests show up here.') +
+    sec('Approved and coming up', upcoming, 'No approved reservations ahead.') +
+    sec('History', history, 'Past, declined and cancelled requests appear here.') + usageSections();
+  resolveNames(state.visits.map(v => v.id).concat(state.items.map(b => b.uid)));
+  if (hadFocus && $('reasonInput')) { const r = $('reasonInput'); r.focus(); r.setSelectionRange(r.value.length, r.value.length); }
+}
+
+function render() {
+  renderConn(); renderChrome(); renderDays(); renderTimeline(); updateSummary(); renderList(); renderDesk(); renderLookup();
+}
+
+/* ---------- Actions ---------- */
+let busy = false;
+async function run(fn, okMsg) {
+  if (busy) return; busy = true;
+  try { await fn(); if (okMsg) toast(okMsg); } catch (err) { toast(errText(err), true); } finally { busy = false; }
+}
+function setDate(ds) { state.date = ds; $('fDate').value = ds; renderDays(); renderTimeline(); updateSummary(); }
+function pickHour(h) {
+  $('fStart').value = pad(h) + ':00'; renderTimeline(); updateSummary();
+  if (window.matchMedia('(max-width:880px)').matches) $('formH').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('fName').focus({ preventScroll: true });
+}
+function showDone(rec) {
+  $('bookForm').hidden = true;
+  const d = $('done'); d.hidden = false;
+  d.innerHTML = '<p class="eyebrow">Request sent</p><p>Your reference code</p><p class="codebig mono" id="codeText">' + esc(rec.id) + '</p>' +
+    '<p><strong>' + esc(fmtDay(rec.date)) + '</strong> · ' + fmtRange(rec) + ' · ' + esc(purposeOf(rec.purposeId).short) + ' · ' + (rec.fee ? 'Fee ' + peso(rec.fee) : 'No fee') + '</p>' +
+    '<p class="muted">The slot is held while the barangay desk reviews your request. Keep this code and your mobile number. You need both to check or cancel the request.</p>' +
+    '<div class="btns"><button class="btn" type="button" data-act="copy">Copy code</button><button class="btn ghost" type="button" data-act="new">Reserve another slot</button></div>';
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act],[data-date],[data-h],[data-filter]');
+  if (!t) return;
+  const ds = t.dataset;
+  if (ds.date) return setDate(ds.date);
+  if (ds.h) return pickHour(Number(ds.h));
+  if (ds.filter) { state.listFilter = ds.filter; return renderList(); }
+  const id = ds.id;
+  const b = id && state.items.find(x => x.id === id);
+  switch (ds.act) {
+    case 'desk': state.deskOpen = !state.deskOpen; return render();
+    case 'copy': {
+      const code = $('codeText').textContent;
+      try { navigator.clipboard.writeText(code).then(() => toast('Code copied'), () => toast('Select the code and copy it.')); } catch (err) { toast('Select the code and copy it.'); }
+      return;
+    }
+    case 'new': $('done').hidden = true; $('bookForm').hidden = false; $('fDetails').value = ''; renderTimeline(); return updateSummary();
+    case 'lc-ask': state.confirm = 'lc:' + id; return renderLookup();
+    case 'lc-no': case 'c-no': state.confirm = null; return render();
+    case 'c-ask': state.confirm = 'c:' + id; return renderDesk();
+    case 'd-open': state.declining = id; state.reason = ''; return renderDesk();
+    case 'd-no': state.declining = null; return renderDesk();
+    case 'lc-yes': state.confirm = null; return run(() => Store.update(id, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'requester' }), 'Request cancelled');
+    case 'c-yes': state.confirm = null; return run(() => Store.update(id, { status: 'cancelled', cancelledAt: Date.now(), cancelledBy: 'barangay' }), 'Booking cancelled');
+    case 'd-yes': {
+      const note = state.reason.trim(); state.declining = null; state.reason = '';
+      return run(() => Store.update(id, { status: 'rejected', note: note, decidedAt: Date.now() }), 'Request declined');
+    }
+    case 'approve':
+      if (b && findClash(state.items, b)) return toast('This overlaps another active reservation. Decline or cancel one of them first.', true);
+      return run(() => Store.update(id, { status: 'approved', decidedAt: Date.now() }), 'Approved');
+    case 'paid': return run(() => Store.update(id, { paid: true, paidAt: Date.now() }), 'Marked as paid');
+    case 'unpaid': return run(() => Store.update(id, { paid: false, paidAt: null }), 'Marked as unpaid');
+  }
+});
+document.addEventListener('input', e => { if (e.target.id === 'reasonInput') state.reason = e.target.value; });
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'pinForm') return;
+  e.preventDefault();
+  if ($('pinInput').value === CONFIG.ADMIN_PIN) { state.unlocked = true; render(); } else $('pinErr').hidden = false;
+});
+
+$('bookForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (busy) return;
+  $('formErr').hidden = true;
+  const res = validate(readForm(), new Date(), state.items);
+  if (!res.ok) return showFormErr(res.msg, res.field);
+  const btn = $('submitBtn'); busy = true; btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const out = await Store.create(res.data);
+    if (!out.ok) showFormErr(out.msg, 'fStart'); else showDone(out.rec);
+  } catch (err) { showFormErr(errText(err)); }
+  finally { busy = false; btn.disabled = false; btn.textContent = 'Send reservation request'; }
+});
+$('lookupForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const code = normCode($('lCode').value), phone = normPhone($('lPhone').value);
+  const hit = state.items.find(b => b.id === code && normPhone(b.phone) === phone);
+  state.lookup = { id: hit ? hit.id : null }; state.confirm = null; renderLookup();
+});
+function onFormChange(e) {
+  $('formErr').hidden = true;
+  if (e.target.id === 'fDate' && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { state.date = e.target.value; renderDays(); }
+  renderTimeline(); updateSummary();
+}
+$('bookForm').addEventListener('change', onFormChange);
+$('bookForm').addEventListener('input', onFormChange);
+
+/* ---------- Start ---------- */
+(function boot() {
+  let o = '';
+  for (let i = 1; i <= CONFIG.PUROKS; i++) o += '<option>Purok ' + i + '</option>';
+  $('fPurok').innerHTML = o + '<option>' + CONFIG.OUTSIDE + '</option>';
+  $('fPurpose').innerHTML = CONFIG.PURPOSES.map(p => '<option value="' + p.id + '">' + esc(p.label) + '</option>').join('');
+  o = '';
+  for (let m = CONFIG.OPEN_HOUR * 60; m <= CONFIG.CLOSE_HOUR * 60 - 60; m += 30) o += '<option value="' + pad(Math.floor(m / 60)) + ':' + pad(m % 60) + '">' + fmtTime(m) + '</option>';
+  $('fStart').innerHTML = o; $('fStart').value = '17:00';
+  $('fHours').innerHTML = Array.from({ length: CONFIG.MAX_HOURS }, (_, i) => '<option value="' + (i + 1) + '">' + (i + 1) + (i ? ' hours' : ' hour') + '</option>').join('');
+  $('fHours').value = '2';
+  const now = new Date();
+  $('fDate').min = ymd(now); $('fDate').max = ymd(addDays(now, CONFIG.ADVANCE_DAYS)); $('fDate').value = state.date;
+  render();
+  Store.init();
+})();
+</script>
+
+</body>
+</html>
